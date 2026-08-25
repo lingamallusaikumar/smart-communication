@@ -88,3 +88,14 @@ SmartCommunication enforces strict password hashing (BCrypt), JWT token rotation
 ## 📄 License
 
 Original branding and custom code implementation. All rights reserved.
+
+## Installation
+Run `npm install` in the frontend directory.
+Run `mvn clean install` in the backend directory.
+
+## Run
+Run `npm start` in the frontend directory.
+Run `mvn spring-boot:run` in the backend directory.
+
+## Build
+Run `npm run build` in the frontend directory.

@@ -45,6 +45,7 @@ public class Deal {
     @Column(nullable = false)
     private String title;
 
+    @Column(name = "deal_value")
     private BigDecimal value = BigDecimal.ZERO;
     private Integer probability = 10;
     

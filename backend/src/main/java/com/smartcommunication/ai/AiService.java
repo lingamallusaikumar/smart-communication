@@ -47,7 +47,7 @@ public class AiService {
         String intent = "Product Inquiry";
         if (lower.contains("pricing") || lower.contains("cost") || lower.contains("seat")) {
             intent = "Pricing & Seat Expansion";
-        } else if (lower.contains("support") || lower.contains("ticket") || lower.contains("bug")) {
+        } else if (lower.contains("support") || lower.contains("ticket") || lower.contains("bug") || lower.contains("error") || lower.contains("issue")) {
             intent = "Technical Support Request";
         } else if (lower.contains("contract") || lower.contains("legal")) {
             intent = "Contract Review";

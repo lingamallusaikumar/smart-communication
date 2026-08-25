@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: smartcomm-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: smartcomm_db
+      POSTGRES_USER: smartcomm_user
+      POSTGRES_PASSWORD: smartcomm_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/migrations/V1__init_schema.sql:/docker-entrypoint-initdb.d/V1__init_schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartcomm_user -d smartcomm_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: smartcomm-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: smartcomm-backend
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/smartcomm_db
+      SPRING_DATASOURCE_USERNAME: smartcomm_user
+      SPRING_DATASOURCE_PASSWORD: smartcomm_password
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+      JWT_SECRET: c21hcnRjb21tdW5pY2F0aW9uY3JtX3NlY3VyZV9qd3Rfc2VjcmV0X2tleV8yMDI2X2FpX3BsYXRmb3Jt
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: smartcomm-frontend
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8080/api/v1
+      NEXT_PUBLIC_WS_URL: ws://localhost:8080/ws
+
+volumes:
+  postgres_data:
+  redis_data:

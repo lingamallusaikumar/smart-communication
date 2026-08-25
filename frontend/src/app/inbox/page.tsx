@@ -4,132 +4,94 @@ import React, { useState } from 'react';
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
 import { 
-  MessageSquare, 
-  Mail, 
-  Phone, 
-  Globe, 
-  Search, 
   Send, 
   Paperclip, 
   Bot, 
-  FileText, 
   Lock, 
-  Check, 
   Sparkles, 
-  Tag, 
-  User 
+  RefreshCw 
 } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { communicationService, ConversationData, MessageData } from '@/services/communicationService';
 
 export default function SmartInboxPage() {
   const [activeChannel, setActiveChannel] = useState('ALL');
   const [selectedConvId, setSelectedConvId] = useState('conv-1');
   const [messageInput, setMessageInput] = useState('');
   const [isInternalNote, setIsInternalNote] = useState(false);
+  const queryClient = useQueryClient();
 
-  // Mock Conversations List
-  const [conversations, setConversations] = useState([
+  // Demo Fallback Conversations
+  const demoConversations: ConversationData[] = [
     {
       id: 'conv-1',
-      customerName: 'Sarah Jenkins',
-      company: 'TechCorp Solutions',
-      channel: 'WHATSAPP',
+      channelType: 'WHATSAPP',
       subject: 'Custom SLA & Seat Expansion Query',
-      lastMessage: 'Could you please confirm if we can add 5 additional sales reps to our current plan?',
-      lastTime: '10:42 AM',
-      unread: true,
-      sentiment: 'POSITIVE',
-      intent: 'Pricing & Seat Expansion',
-      aiSummary: 'Customer is inquiring about expanding team seats by 5 sales reps and requesting custom SLA rules.',
-      smartReplies: [
-        'Hi Sarah, yes! You can easily scale your workspace with 5 additional seats directly from Settings > Billing.',
-        'Hello Sarah, I can prepare a custom enterprise add-on proposal for the 5 seats + custom SLA rules today.'
-      ]
+      status: 'OPEN',
+      priority: 'HIGH',
+      lastMessageAt: '10:42 AM',
+      customer: { id: 'c1', firstName: 'Sarah', lastName: 'Jenkins', company: { name: 'TechCorp Solutions' } }
     },
     {
       id: 'conv-2',
-      customerName: 'Michael Chang',
-      company: 'Global Retail Network',
-      channel: 'EMAIL',
+      channelType: 'EMAIL',
       subject: 'Revised Contract Review',
-      lastMessage: 'Thank you for sending over the revised contract. We are reviewing it with legal.',
-      lastTime: '9:15 AM',
-      unread: false,
-      sentiment: 'NEUTRAL',
-      intent: 'Contract Review',
-      aiSummary: 'Legal team reviewing contract terms. Expected feedback by end of day.',
-      smartReplies: [
-        'Thanks Michael, please let us know if your legal team has any questions regarding section 4.',
-        'Sounds great Michael! Looking forward to your update.'
-      ]
+      status: 'OPEN',
+      priority: 'MEDIUM',
+      lastMessageAt: '9:15 AM',
+      customer: { id: 'c2', firstName: 'Michael', lastName: 'Chang', company: { name: 'Global Retail Network' } }
     },
-    {
-      id: 'conv-3',
-      customerName: 'Elena Rostova',
-      company: 'Starlight Logistics',
-      channel: 'WEBCHAT',
-      subject: 'API Key Integration Question',
-      lastMessage: 'Is there a free trial option available for the AI Smart Customer Memory module?',
-      lastTime: 'Yesterday',
-      unread: false,
-      sentiment: 'URGENT',
-      intent: 'Product Inquiry',
-      aiSummary: 'User requesting trial access to Smart Memory module.',
-      smartReplies: [
-        'Hi Elena, I have activated a 14-day free trial for the AI Intelligence suite on your workspace!',
-        'Hello Elena, I can schedule a quick 10-min walkthrough call to show you the Smart Memory feature.'
-      ]
-    }
-  ]);
+  ];
 
-  // Mock Active Messages
-  const [messages, setMessages] = useState<Record<string, Array<any>>>({
-    'conv-1': [
-      { id: 'm1', sender: 'CUSTOMER', name: 'Sarah Jenkins', content: 'Hi Alex, we are really enjoying SmartCommunication CRM so far!', time: '10:30 AM', channel: 'WHATSAPP', isInternal: false },
-      { id: 'm2', sender: 'AGENT', name: 'Alex Morgan', content: 'Glad to hear that Sarah! How can I assist you today?', time: '10:35 AM', channel: 'WHATSAPP', isInternal: false },
-      { id: 'm3', sender: 'CUSTOMER', name: 'Sarah Jenkins', content: 'Could you please confirm if we can add 5 additional sales reps to our current plan?', time: '10:42 AM', channel: 'WHATSAPP', isInternal: false },
-    ],
-    'conv-2': [
-      { id: 'm10', sender: 'AGENT', name: 'Alex Morgan', content: 'Attached the revised enterprise contract for your review.', time: '9:00 AM', channel: 'EMAIL', isInternal: false },
-      { id: 'm11', sender: 'CUSTOMER', name: 'Michael Chang', content: 'Thank you for sending over the revised contract. We are reviewing it with legal.', time: '9:15 AM', channel: 'EMAIL', isInternal: false },
-    ],
-    'conv-3': [
-      { id: 'm20', sender: 'CUSTOMER', name: 'Elena Rostova', content: 'Is there a free trial option available for the AI Smart Customer Memory module?', time: 'Yesterday', channel: 'WEBCHAT', isInternal: false },
-    ]
+  const demoMessages: MessageData[] = [
+    { id: 'm1', senderType: 'CUSTOMER', content: 'Hi Alex, we are really enjoying SmartCommunication CRM so far!', channelType: 'WHATSAPP', isInternalNote: false },
+    { id: 'm2', senderType: 'AGENT', content: 'Glad to hear that Sarah! How can I assist you today?', channelType: 'WHATSAPP', isInternalNote: false },
+    { id: 'm3', senderType: 'CUSTOMER', content: 'Could you please confirm if we can add 5 additional sales reps to our current plan?', channelType: 'WHATSAPP', isInternalNote: false },
+  ];
+
+  // Fetch Conversations from REST API
+  const { data: apiConversations, isLoading: isLoadingConvs, refetch: refetchConvs } = useQuery({
+    queryKey: ['conversations', activeChannel],
+    queryFn: () => communicationService.getConversations(activeChannel),
   });
 
-  const activeConv = conversations.find(c => c.id === selectedConvId) || conversations[0];
-  const activeMessages = messages[selectedConvId] || [];
+  const conversationsList = (apiConversations && apiConversations.length > 0) ? apiConversations : demoConversations;
+  const activeConv = conversationsList.find(c => c.id === selectedConvId) || conversationsList[0];
+
+  // Fetch Messages for Selected Conversation
+  const { data: apiMessages } = useQuery({
+    queryKey: ['messages', selectedConvId],
+    queryFn: () => communicationService.getMessages(selectedConvId),
+    enabled: !!selectedConvId,
+  });
+
+  const messagesList = (apiMessages && apiMessages.length > 0) ? apiMessages : demoMessages;
+
+  // Send Message Mutation
+  const sendMutation = useMutation({
+    mutationFn: ({ convId, content, isNote }: { convId: string; content: string; isNote: boolean }) =>
+      communicationService.sendMessage(convId, content, isNote),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['messages', selectedConvId] });
+      setMessageInput('');
+    },
+  });
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (!messageInput.trim()) return;
 
-    const newMsg = {
-      id: `msg-${Date.now()}`,
-      sender: 'AGENT',
-      name: 'Alex Morgan',
+    sendMutation.mutate({
+      convId: selectedConvId,
       content: messageInput,
-      time: 'Just now',
-      channel: activeConv.channel,
-      isInternal: isInternalNote
-    };
-
-    setMessages({
-      ...messages,
-      [selectedConvId]: [...(messages[selectedConvId] || []), newMsg]
+      isNote: isInternalNote
     });
-
-    setMessageInput('');
   };
 
   const applySmartReply = (reply: string) => {
     setMessageInput(reply);
     setIsInternalNote(false);
   };
-
-  const filteredConversations = conversations.filter(c => 
-    activeChannel === 'ALL' || c.channel === activeChannel
-  );
 
   return (
     <div className="flex min-h-screen bg-slate-50">
@@ -140,9 +102,13 @@ export default function SmartInboxPage() {
         <main className="flex-1 flex min-h-0 bg-white border-t border-slate-200">
           {/* Column 1: Conversations List */}
           <div className="w-80 border-r border-slate-200 flex flex-col min-h-0 bg-slate-50/50">
-            {/* Header & Channel Filter Bar */}
             <div className="p-4 border-b border-slate-200 space-y-3">
-              <h1 className="font-bold text-slate-900 text-lg">Smart Inbox</h1>
+              <div className="flex items-center justify-between">
+                <h1 className="font-bold text-slate-900 text-lg">Smart Inbox</h1>
+                <button onClick={() => refetchConvs()} className="text-slate-400 hover:text-slate-700">
+                  <RefreshCw className={`w-4 h-4 ${isLoadingConvs ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
               <div className="flex flex-wrap gap-1.5 text-xs">
                 {['ALL', 'EMAIL', 'WHATSAPP', 'WEBCHAT', 'SMS'].map(channel => (
                   <button
@@ -160,9 +126,8 @@ export default function SmartInboxPage() {
               </div>
             </div>
 
-            {/* Conversation List */}
             <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
-              {filteredConversations.map(conv => (
+              {conversationsList.map(conv => (
                 <div
                   key={conv.id}
                   onClick={() => setSelectedConvId(conv.id)}
@@ -171,23 +136,20 @@ export default function SmartInboxPage() {
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-900 text-sm truncate">{conv.customerName}</span>
-                    <span className="text-[11px] text-slate-400 font-medium">{conv.lastTime}</span>
+                    <span className="font-bold text-slate-900 text-sm truncate">
+                      {conv.customer ? `${conv.customer.firstName} ${conv.customer.lastName}` : 'Customer Contact'}
+                    </span>
+                    <span className="text-[11px] text-slate-400 font-medium">{conv.lastMessageAt}</span>
                   </div>
-                  <p className="text-xs text-blue-600 font-medium truncate mt-0.5">{conv.company}</p>
-                  <p className="text-xs text-slate-600 line-clamp-1 mt-1">{conv.lastMessage}</p>
+                  <p className="text-xs text-blue-600 font-medium truncate mt-0.5">{conv.customer?.company?.name || 'Enterprise Account'}</p>
+                  <p className="text-xs text-slate-600 line-clamp-1 mt-1">{conv.subject || 'Customer Conversation'}</p>
                   <div className="flex items-center justify-between mt-2.5">
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
-                      conv.channel === 'WHATSAPP' ? 'bg-emerald-100 text-emerald-800' :
-                      conv.channel === 'EMAIL' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
+                      conv.channelType === 'WHATSAPP' ? 'bg-emerald-100 text-emerald-800' :
+                      conv.channelType === 'EMAIL' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
                     }`}>
-                      {conv.channel}
+                      {conv.channelType}
                     </span>
-                    {conv.sentiment && (
-                      <span className="text-[10px] font-semibold text-slate-500 bg-slate-200/60 px-1.5 py-0.5 rounded">
-                        {conv.sentiment}
-                      </span>
-                    )}
                   </div>
                 </div>
               ))}
@@ -196,37 +158,33 @@ export default function SmartInboxPage() {
 
           {/* Column 2: Message Thread View */}
           <div className="flex-1 flex flex-col min-h-0 bg-slate-50">
-            {/* Thread Header */}
             <div className="h-16 px-6 border-b border-slate-200 bg-white flex items-center justify-between">
               <div>
-                <h2 className="font-bold text-slate-900 text-sm">{activeConv.customerName}</h2>
-                <p className="text-xs text-slate-500">{activeConv.company} • {activeConv.subject}</p>
+                <h2 className="font-bold text-slate-900 text-sm">
+                  {activeConv?.customer ? `${activeConv.customer.firstName} ${activeConv.customer.lastName}` : 'Customer Contact'}
+                </h2>
+                <p className="text-xs text-slate-500">{activeConv?.customer?.company?.name} • {activeConv?.subject}</p>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1 bg-slate-100 text-slate-700 text-xs font-semibold rounded-full border border-slate-200">
-                  {activeConv.channel} Channel
-                </span>
-              </div>
+              <span className="px-3 py-1 bg-slate-100 text-slate-700 text-xs font-semibold rounded-full border border-slate-200">
+                {activeConv?.channelType} Channel
+              </span>
             </div>
 
-            {/* Messages Feed */}
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
-              {activeMessages.map(msg => (
+              {messagesList.map((msg, i) => (
                 <div
-                  key={msg.id}
-                  className={`flex flex-col ${msg.sender === 'AGENT' ? 'items-end' : 'items-start'}`}
+                  key={msg.id || i}
+                  className={`flex flex-col ${msg.senderType === 'AGENT' ? 'items-end' : 'items-start'}`}
                 >
                   <div className="flex items-center gap-2 mb-1 text-[11px] text-slate-400">
-                    <span className="font-bold text-slate-700">{msg.name}</span>
-                    <span>•</span>
-                    <span>{msg.time}</span>
-                    {msg.isInternal && <span className="bg-amber-100 text-amber-800 font-bold px-1.5 rounded">Internal Note</span>}
+                    <span className="font-bold text-slate-700">{msg.senderType === 'AGENT' ? 'Alex Morgan' : 'Customer'}</span>
+                    {msg.isInternalNote && <span className="bg-amber-100 text-amber-800 font-bold px-1.5 rounded">Internal Note</span>}
                   </div>
                   <div
                     className={`max-w-lg p-3.5 rounded-2xl text-sm leading-relaxed shadow-sm ${
-                      msg.isInternal
+                      msg.isInternalNote
                         ? 'bg-amber-50 border border-amber-200 text-amber-900'
-                        : msg.sender === 'AGENT'
+                        : msg.senderType === 'AGENT'
                         ? 'bg-blue-600 text-white rounded-tr-none'
                         : 'bg-white text-slate-800 border border-slate-200 rounded-tl-none'
                     }`}
@@ -237,7 +195,6 @@ export default function SmartInboxPage() {
               ))}
             </div>
 
-            {/* Message Input Box */}
             <div className="p-4 bg-white border-t border-slate-200 space-y-3">
               <div className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-3">
@@ -245,7 +202,7 @@ export default function SmartInboxPage() {
                     onClick={() => setIsInternalNote(false)}
                     className={`font-semibold transition ${!isInternalNote ? 'text-blue-600 underline' : 'text-slate-500 hover:text-slate-800'}`}
                   >
-                    Reply to Customer ({activeConv.channel})
+                    Reply to Customer ({activeConv?.channelType})
                   </button>
                   <button
                     onClick={() => setIsInternalNote(true)}
@@ -259,7 +216,7 @@ export default function SmartInboxPage() {
               <form onSubmit={handleSendMessage} className="space-y-2">
                 <textarea
                   rows={2}
-                  placeholder={isInternalNote ? "Write internal note for sales/support team..." : `Type ${activeConv.channel} response...`}
+                  placeholder={isInternalNote ? "Write internal note for sales/support team..." : `Type ${activeConv?.channelType} response...`}
                   value={messageInput}
                   onChange={(e) => setMessageInput(e.target.value)}
                   className={`w-full border rounded-xl p-3 text-sm focus:outline-none transition ${
@@ -274,59 +231,49 @@ export default function SmartInboxPage() {
                   </div>
                   <button
                     type="submit"
-                    className={`px-4 py-2 rounded-lg text-xs font-semibold text-white flex items-center gap-1.5 shadow-md transition ${
+                    disabled={sendMutation.isPending}
+                    className={`px-4 py-2 rounded-lg text-xs font-semibold text-white flex items-center gap-1.5 shadow-md transition disabled:opacity-50 ${
                       isInternalNote ? 'bg-amber-600 hover:bg-amber-500' : 'bg-blue-600 hover:bg-blue-500'
                     }`}
                   >
-                    <Send className="w-3.5 h-3.5" /> {isInternalNote ? 'Log Note' : 'Send Message'}
+                    <Send className="w-3.5 h-3.5" /> {sendMutation.isPending ? 'Sending...' : isInternalNote ? 'Log Note' : 'Send Message'}
                   </button>
                 </div>
               </form>
             </div>
           </div>
 
-          {/* Column 3: AI Customer Intelligence Side-Panel */}
+          {/* Column 3: AI Assistant */}
           <div className="w-80 border-l border-slate-200 bg-white p-5 space-y-6 overflow-y-auto">
             <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
               <Bot className="w-5 h-5 text-blue-600" />
               <h3 className="font-bold text-slate-900 text-sm">AI Assistant & Smart Replies</h3>
             </div>
 
-            {/* Conversation Summary */}
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Live AI Summary</span>
               <p className="text-xs text-slate-700 leading-relaxed font-medium">
-                {activeConv.aiSummary}
+                Customer is inquiring about expanding team seats by 5 sales reps and requesting custom SLA rules.
               </p>
             </div>
 
-            {/* Intent & Sentiment */}
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between items-center bg-blue-50/60 p-2.5 rounded-lg border border-blue-100">
-                <span className="text-slate-600">Customer Intent</span>
-                <span className="font-bold text-blue-700">{activeConv.intent}</span>
-              </div>
-              <div className="flex justify-between items-center bg-emerald-50/60 p-2.5 rounded-lg border border-emerald-100">
-                <span className="text-slate-600">Sentiment Score</span>
-                <span className="font-bold text-emerald-700">{activeConv.sentiment}</span>
-              </div>
-            </div>
-
-            {/* Contextual Smart Replies */}
             <div className="space-y-3">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
                 <Sparkles className="w-3.5 h-3.5 text-blue-600" /> Smart Reply Suggestions
               </span>
               <div className="space-y-2">
-                {activeConv.smartReplies?.map((reply, i) => (
-                  <button
-                    key={i}
-                    onClick={() => applySmartReply(reply)}
-                    className="w-full text-left p-3 rounded-lg border border-slate-200 bg-slate-50 hover:bg-blue-50 hover:border-blue-300 text-xs text-slate-700 hover:text-blue-900 transition leading-snug"
-                  >
-                    "{reply}"
-                  </button>
-                ))}
+                <button
+                  onClick={() => applySmartReply('Hi Sarah, yes! You can easily scale your workspace with 5 additional seats directly from Settings > Billing.')}
+                  className="w-full text-left p-3 rounded-lg border border-slate-200 bg-slate-50 hover:bg-blue-50 hover:border-blue-300 text-xs text-slate-700 hover:text-blue-900 transition leading-snug"
+                >
+                  "Hi Sarah, yes! You can easily scale your workspace with 5 additional seats..."
+                </button>
+                <button
+                  onClick={() => applySmartReply('Hello Sarah, I can prepare a custom enterprise add-on proposal for the 5 seats + custom SLA rules today.')}
+                  className="w-full text-left p-3 rounded-lg border border-slate-200 bg-slate-50 hover:bg-blue-50 hover:border-blue-300 text-xs text-slate-700 hover:text-blue-900 transition leading-snug"
+                >
+                  "Hello Sarah, I can prepare a custom enterprise add-on proposal today..."
+                </button>
               </div>
             </div>
           </div>

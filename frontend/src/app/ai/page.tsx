@@ -3,7 +3,9 @@
 import React, { useState } from 'react';
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
-import { Bot, Sparkles, TrendingUp, AlertCircle, ArrowRight, Brain, Zap, CheckCircle2, MessageSquare } from 'lucide-react';
+import { Bot, Sparkles, Brain, Zap, MessageSquare } from 'lucide-react';
+import { useMutation } from '@tanstack/react-query';
+import { aiService } from '@/services/aiService';
 
 export default function AiIntelligencePage() {
   const [inputText, setInputText] = useState(
@@ -21,34 +23,18 @@ export default function AiIntelligencePage() {
     ]
   });
 
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  // Real-time AI Analysis Mutation
+  const analyzeMutation = useMutation({
+    mutationFn: (text: string) => aiService.analyzeText(text),
+    onSuccess: (data) => {
+      setAiResult(data);
+    },
+  });
 
   const handleRunAnalysis = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputText.trim()) return;
-
-    setIsAnalyzing(true);
-    setTimeout(() => {
-      const lower = inputText.toLowerCase();
-      let sentiment = 'POSITIVE';
-      if (lower.contains ? lower.contains('issue') || lower.contains('cancel') : lower.includes('cancel')) {
-        sentiment = 'NEGATIVE';
-      } else if (lower.includes('urgent') || lower.includes('error')) {
-        sentiment = 'URGENT';
-      }
-
-      setAiResult({
-        sentiment,
-        intent: lower.includes('pricing') || lower.includes('seat') ? 'Pricing & Seat Expansion' : 'General Product Inquiry',
-        summary: `AI analyzed conversation text (${inputText.length} characters). Extracted key intent & sentiment metrics.`,
-        recommendedAction: 'Assign Sales Manager for follow-up outreach within 24 hours.',
-        smartReplies: [
-          'Thank you for reaching out! I can assist you with your request immediately.',
-          'I have forwarded your inquiry to our account specialist for review.'
-        ]
-      });
-      setIsAnalyzing(false);
-    }, 600);
+    analyzeMutation.mutate(inputText);
   };
 
   return (
@@ -58,7 +44,6 @@ export default function AiIntelligencePage() {
         <Header />
 
         <main className="flex-1 overflow-y-auto p-8 space-y-8">
-          {/* Header Banner */}
           <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 rounded-2xl p-6 text-white shadow-xl flex items-center justify-between border border-slate-800">
             <div>
               <div className="inline-flex items-center gap-2 bg-blue-500/20 text-blue-300 font-semibold px-3 py-1 rounded-full text-xs mb-3 border border-blue-500/30">
@@ -72,7 +57,6 @@ export default function AiIntelligencePage() {
             <Sparkles className="w-16 h-16 text-blue-400 opacity-20 hidden md:block" />
           </div>
 
-          {/* AI Metrics Overview */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
               <div>
@@ -119,9 +103,7 @@ export default function AiIntelligencePage() {
             </div>
           </div>
 
-          {/* Live AI Conversation Analysis Simulator */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
-            {/* Input Simulator */}
             <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-4">
               <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
                 <MessageSquare className="w-5 h-5 text-blue-600" />
@@ -141,15 +123,14 @@ export default function AiIntelligencePage() {
                 </div>
                 <button
                   type="submit"
-                  disabled={isAnalyzing}
+                  disabled={analyzeMutation.isPending}
                   className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 transition disabled:opacity-50"
                 >
-                  <Sparkles className="w-4 h-4" /> {isAnalyzing ? 'Analyzing via AI Engine...' : 'Run AI Sentiment & Intent Analysis'}
+                  <Sparkles className="w-4 h-4" /> {analyzeMutation.isPending ? 'Analyzing via AI Engine...' : 'Run AI Sentiment & Intent Analysis'}
                 </button>
               </form>
             </div>
 
-            {/* AI Real-time Output Card */}
             <div className="bg-slate-900 text-white rounded-xl p-6 shadow-xl border border-slate-800 space-y-6">
               <div className="flex items-center justify-between border-b border-slate-800 pb-4">
                 <div className="flex items-center gap-2">
@@ -179,7 +160,7 @@ export default function AiIntelligencePage() {
 
                 <div className="space-y-2">
                   <span className="text-slate-400 font-bold uppercase text-[10px] tracking-wider block">Suggested Smart Replies</span>
-                  {aiResult.smartReplies.map((reply: string, idx: number) => (
+                  {aiResult.smartReplies?.map((reply: string, idx: number) => (
                     <div key={idx} className="bg-slate-800/50 p-3 rounded-lg border border-slate-700/40 text-slate-300 text-xs">
                       "{reply}"
                     </div>

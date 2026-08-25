@@ -3,47 +3,55 @@
 import React, { useState } from 'react';
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
-import { Target, Plus, UserCheck, Flame, Building, Mail, Phone, ArrowRight } from 'lucide-react';
+import { Target, Plus, UserCheck, Flame, ArrowRight, RefreshCw } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { leadService, LeadData } from '@/services/leadService';
 
 export default function LeadsPage() {
-  const [leads, setLeads] = useState([
+  const queryClient = useQueryClient();
+
+  const demoLeads: LeadData[] = [
     {
       id: 'lead-1',
       firstName: 'David',
       lastName: 'Miller',
       email: 'd.miller@fintech.io',
-      company: 'FinTech Dynamics',
+      companyName: 'FinTech Dynamics',
       status: 'QUALIFIED',
       score: 85,
-      estimatedValue: '$35,000',
-      source: 'Website Inbound',
+      estimatedValue: 35000,
     },
     {
       id: 'lead-2',
       firstName: 'Jessica',
       lastName: 'Alba',
       email: 'jessica@cloudscale.net',
-      company: 'CloudScale Networks',
+      companyName: 'CloudScale Networks',
       status: 'PROPOSAL',
       score: 92,
-      estimatedValue: '$60,000',
-      source: 'LinkedIn Campaign',
+      estimatedValue: 60000,
     },
-    {
-      id: 'lead-3',
-      firstName: 'Robert',
-      lastName: 'Fox',
-      email: 'robert@apexlogistics.com',
-      company: 'Apex Logistics',
-      status: 'NEW',
-      score: 45,
-      estimatedValue: '$18,000',
-      source: 'Cold Outreach',
+  ];
+
+  // Fetch Leads from Backend REST API
+  const { data: apiLeads, isLoading, refetch } = useQuery({
+    queryKey: ['leads'],
+    queryFn: leadService.getLeads,
+  });
+
+  const leads = (apiLeads && apiLeads.length > 0) ? apiLeads : demoLeads;
+
+  // Convert Lead Mutation
+  const convertMutation = useMutation({
+    mutationFn: (id: string) => leadService.convertLeadToCustomer(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
     },
-  ]);
+  });
 
   const handleConvertLead = (id: string) => {
-    setLeads(leads.map(l => l.id === id ? { ...l, status: 'CONVERTED' } : l));
+    convertMutation.mutate(id);
   };
 
   return (
@@ -58,9 +66,18 @@ export default function LeadsPage() {
               <h1 className="text-2xl font-bold text-slate-900">Lead Pipeline & Qualification</h1>
               <p className="text-xs text-slate-500 mt-1">Track inbound lead stages, lead scoring, and convert qualified leads to active customers.</p>
             </div>
-            <button className="bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-4 py-2.5 rounded-lg flex items-center gap-2 shadow-md">
-              <Plus className="w-4 h-4" /> Create Lead
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => refetch()}
+                className="p-2 text-slate-500 hover:text-slate-700 bg-white border border-slate-200 rounded-lg"
+                title="Refresh Leads"
+              >
+                <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+              </button>
+              <button className="bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-4 py-2.5 rounded-lg flex items-center gap-2 shadow-md">
+                <Plus className="w-4 h-4" /> Create Lead
+              </button>
+            </div>
           </div>
 
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -84,17 +101,16 @@ export default function LeadsPage() {
                         <p className="text-xs text-slate-400 font-normal">{lead.email}</p>
                       </td>
                       <td className="px-6 py-4 font-medium text-slate-800">
-                        {lead.company}
-                        <span className="block text-[11px] text-slate-400 font-normal">Source: {lead.source}</span>
+                        {lead.companyName || 'Independent Lead'}
                       </td>
                       <td className="px-6 py-4">
                         <span className={`inline-flex items-center gap-1 font-bold text-xs px-2.5 py-1 rounded-full ${
-                          lead.score >= 80 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                          (lead.score || 80) >= 80 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
                         }`}>
-                          <Flame className="w-3.5 h-3.5 text-amber-500" /> {lead.score} / 100
+                          <Flame className="w-3.5 h-3.5 text-amber-500" /> {lead.score || 80} / 100
                         </span>
                       </td>
-                      <td className="px-6 py-4 font-bold text-slate-900">{lead.estimatedValue}</td>
+                      <td className="px-6 py-4 font-bold text-slate-900">${(lead.estimatedValue || 25000).toLocaleString()}</td>
                       <td className="px-6 py-4">
                         <span className="px-2.5 py-1 bg-blue-100 text-blue-800 text-xs font-bold rounded-md uppercase">
                           {lead.status}
@@ -107,8 +123,9 @@ export default function LeadsPage() {
                           </span>
                         ) : (
                           <button
-                            onClick={() => handleConvertLead(lead.id)}
-                            className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-1.5 rounded-md flex items-center gap-1 ml-auto shadow-sm"
+                            onClick={() => handleConvertLead(lead.id!)}
+                            disabled={convertMutation.isPending}
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-1.5 rounded-md flex items-center gap-1 ml-auto shadow-sm disabled:opacity-50"
                           >
                             Convert to 360 Customer <ArrowRight className="w-3.5 h-3.5" />
                           </button>

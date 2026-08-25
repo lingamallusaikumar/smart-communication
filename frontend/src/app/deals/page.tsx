@@ -3,10 +3,15 @@
 import React, { useState } from 'react';
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
-import { KanbanSquare, Plus, DollarSign, TrendingUp, Building, User, ChevronRight, CheckCircle2, XCircle } from 'lucide-react';
+import { KanbanSquare, Plus, Building, User, ChevronRight, RefreshCw } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { dealService, DealData } from '@/services/dealService';
 
 export default function DealsPage() {
-  const [stages, setStages] = useState([
+  const queryClient = useQueryClient();
+
+  // Demo Fallback Data Structure
+  const initialStages = [
     {
       id: 'stage-1',
       name: 'Qualification',
@@ -40,19 +45,63 @@ export default function DealsPage() {
         { id: 'deal-5', title: 'Global Retail Omnichannel Hub', value: 120000, company: 'Global Retail Network', contact: 'Michael Chang' }
       ]
     }
-  ]);
+  ];
 
+  const [stages, setStages] = useState(initialStages);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newDeal, setNewDeal] = useState({ title: '', value: '', company: '', stageId: 'stage-1' });
 
+  // Fetch Deals & Forecast from REST API
+  const { data: apiDeals, refetch } = useQuery({
+    queryKey: ['deals'],
+    queryFn: () => dealService.getDeals(),
+  });
+
+  const { data: forecastData } = useQuery({
+    queryKey: ['sales-forecast'],
+    queryFn: dealService.getSalesForecast,
+  });
+
   // Forecasting Math
-  const totalPipeline = stages.reduce((acc, stage) => 
+  const totalPipeline = forecastData?.totalPipelineValue || stages.reduce((acc, stage) => 
     acc + stage.deals.reduce((dAcc, deal) => dAcc + deal.value, 0), 0
   );
 
-  const weightedForecast = stages.reduce((acc, stage) => 
+  const weightedForecast = forecastData?.weightedForecast || stages.reduce((acc, stage) => 
     acc + stage.deals.reduce((dAcc, deal) => dAcc + (deal.value * stage.probability / 100), 0), 0
   );
+
+  // Update Stage Mutation
+  const updateStageMutation = useMutation({
+    mutationFn: ({ dealId, stageId }: { dealId: string; stageId: string }) => 
+      dealService.updateDealStage(dealId, stageId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['deals'] });
+      queryClient.invalidateQueries({ queryKey: ['sales-forecast'] });
+    },
+  });
+
+  const moveDealStage = (dealId: string, currentStageId: string, targetStageId: string) => {
+    updateStageMutation.mutate({ dealId, stageId: targetStageId });
+
+    let movedDeal: any = null;
+    const updatedStages = stages.map(stage => {
+      if (stage.id === currentStageId) {
+        movedDeal = stage.deals.find(d => d.id === dealId);
+        return { ...stage, deals: stage.deals.filter(d => d.id !== dealId) };
+      }
+      return stage;
+    });
+
+    if (movedDeal) {
+      setStages(updatedStages.map(stage => {
+        if (stage.id === targetStageId) {
+          return { ...stage, deals: [...stage.deals, movedDeal] };
+        }
+        return stage;
+      }));
+    }
+  };
 
   const handleCreateDeal = (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,29 +124,6 @@ export default function DealsPage() {
     setNewDeal({ title: '', value: '', company: '', stageId: 'stage-1' });
   };
 
-  const moveDealStage = (dealId: string, currentStageId: string, targetStageId: string) => {
-    let movedDeal: any = null;
-
-    // Remove deal from source stage
-    const updatedStages = stages.map(stage => {
-      if (stage.id === currentStageId) {
-        movedDeal = stage.deals.find(d => d.id === dealId);
-        return { ...stage, deals: stage.deals.filter(d => d.id !== dealId) };
-      }
-      return stage;
-    });
-
-    // Add deal to target stage
-    if (movedDeal) {
-      setStages(updatedStages.map(stage => {
-        if (stage.id === targetStageId) {
-          return { ...stage, deals: [...stage.deals, movedDeal] };
-        }
-        return stage;
-      }));
-    }
-  };
-
   return (
     <div className="flex min-h-screen bg-slate-50">
       <Sidebar />
@@ -105,30 +131,37 @@ export default function DealsPage() {
         <Header />
 
         <main className="flex-1 overflow-y-auto p-8 space-y-6">
-          {/* Header Bar */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
               <h1 className="text-2xl font-bold text-slate-900">Sales Pipeline Kanban</h1>
               <p className="text-xs text-slate-500 mt-1">Manage sales opportunities, stage velocity, and revenue forecasting.</p>
             </div>
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className="bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-4 py-2.5 rounded-lg flex items-center gap-2 shadow-md"
-            >
-              <Plus className="w-4 h-4" /> Add Deal Opportunity
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => refetch()}
+                className="p-2 bg-white border border-slate-200 rounded-lg text-slate-600 hover:text-slate-900"
+                title="Refresh Forecast"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setIsModalOpen(true)}
+                className="bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-4 py-2.5 rounded-lg flex items-center gap-2 shadow-md"
+              >
+                <Plus className="w-4 h-4" /> Add Deal Opportunity
+              </button>
+            </div>
           </div>
 
-          {/* Forecasting Stats Bar */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
               <p className="text-xs font-semibold text-slate-500 uppercase">Total Pipeline Value</p>
-              <p className="text-2xl font-black text-slate-900 mt-1">${totalPipeline.toLocaleString()}</p>
+              <p className="text-2xl font-black text-slate-900 mt-1">${Number(totalPipeline).toLocaleString()}</p>
             </div>
 
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
               <p className="text-xs font-semibold text-slate-500 uppercase">Weighted Revenue Forecast</p>
-              <p className="text-2xl font-black text-blue-600 mt-1">${weightedForecast.toLocaleString()}</p>
+              <p className="text-2xl font-black text-blue-600 mt-1">${Number(weightedForecast).toLocaleString()}</p>
             </div>
 
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
@@ -139,11 +172,9 @@ export default function DealsPage() {
             </div>
           </div>
 
-          {/* Kanban Board Columns Grid */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-5 items-start">
             {stages.map((stage, idx) => (
               <div key={stage.id} className="bg-slate-100/80 border border-slate-200 rounded-xl p-4 space-y-4 min-h-[600px]">
-                {/* Stage Column Header */}
                 <div className="flex items-center justify-between border-b border-slate-200 pb-3">
                   <div>
                     <h3 className="font-bold text-slate-900 text-sm">{stage.name}</h3>
@@ -154,7 +185,6 @@ export default function DealsPage() {
                   </span>
                 </div>
 
-                {/* Stage Deals List */}
                 <div className="space-y-3">
                   {stage.deals.map((deal) => (
                     <div key={deal.id} className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm space-y-2 hover:shadow-md transition">
@@ -172,7 +202,6 @@ export default function DealsPage() {
                         </p>
                       </div>
 
-                      {/* Move Stage Controls */}
                       <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
                         <span className="text-slate-400 text-[10px]">Move Stage:</span>
                         <div className="flex gap-1">
@@ -203,7 +232,6 @@ export default function DealsPage() {
         </main>
       </div>
 
-      {/* Add Deal Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-2xl border border-slate-200 space-y-4">
@@ -243,19 +271,6 @@ export default function DealsPage() {
                   onChange={(e) => setNewDeal({ ...newDeal, value: e.target.value })}
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
                 />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Pipeline Stage</label>
-                <select
-                  value={newDeal.stageId}
-                  onChange={(e) => setNewDeal({ ...newDeal, stageId: e.target.value })}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
-                >
-                  {stages.map(s => (
-                    <option key={s.id} value={s.id}>{s.name} ({s.probability}%)</option>
-                  ))}
-                </select>
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">

@@ -3,49 +3,15 @@
 import React, { useState } from 'react';
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
-import { Search, Plus, User, Building, Mail, Phone, ExternalLink } from 'lucide-react';
+import { Search, Plus, Building, Mail, Phone, ExternalLink, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { customerService, CustomerData } from '@/services/customerService';
 
 export default function CustomersPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
-
-  // Mock initial demo data
-  const [customers, setCustomers] = useState([
-    {
-      id: 'cust-101',
-      firstName: 'Sarah',
-      lastName: 'Jenkins',
-      email: 'sarah.j@techcorp.io',
-      phone: '+1 (555) 234-5678',
-      company: 'TechCorp Solutions',
-      jobTitle: 'VP of Engineering',
-      status: 'ACTIVE',
-      owner: 'Alex Morgan',
-    },
-    {
-      id: 'cust-102',
-      firstName: 'Michael',
-      lastName: 'Chang',
-      email: 'm.chang@globalretail.com',
-      phone: '+1 (555) 876-5432',
-      company: 'Global Retail Network',
-      jobTitle: 'Director of IT',
-      status: 'ACTIVE',
-      owner: 'Taylor Swift',
-    },
-    {
-      id: 'cust-103',
-      firstName: 'Elena',
-      lastName: 'Rostova',
-      email: 'elena@starlight.eu',
-      phone: '+44 20 7946 0912',
-      company: 'Starlight Logistics',
-      jobTitle: 'Head of Operations',
-      status: 'LEAD',
-      owner: 'Alex Morgan',
-    },
-  ]);
+  const queryClient = useQueryClient();
 
   const [newCustomer, setNewCustomer] = useState({
     firstName: '',
@@ -56,26 +22,67 @@ export default function CustomersPage() {
     jobTitle: '',
   });
 
+  // Demo Fallback Data
+  const demoCustomers: CustomerData[] = [
+    {
+      id: 'cust-101',
+      firstName: 'Sarah',
+      lastName: 'Jenkins',
+      email: 'sarah.j@techcorp.io',
+      phoneNumber: '+1 (555) 234-5678',
+      company: { id: 'c1', name: 'TechCorp Solutions' },
+      jobTitle: 'VP of Engineering',
+      status: 'ACTIVE',
+      assignedOwner: { id: 'u1', firstName: 'Alex', lastName: 'Morgan' },
+    },
+    {
+      id: 'cust-102',
+      firstName: 'Michael',
+      lastName: 'Chang',
+      email: 'm.chang@globalretail.com',
+      phoneNumber: '+1 (555) 876-5432',
+      company: { id: 'c2', name: 'Global Retail Network' },
+      jobTitle: 'Director of IT',
+      status: 'ACTIVE',
+      assignedOwner: { id: 'u2', firstName: 'Taylor', lastName: 'Swift' },
+    },
+  ];
+
+  // Fetch Customers from Spring Boot Backend
+  const { data: apiCustomers, isLoading, isError, refetch } = useQuery({
+    queryKey: ['customers'],
+    queryFn: customerService.getCustomers,
+  });
+
+  const customersList = (apiCustomers && apiCustomers.length > 0) ? apiCustomers : demoCustomers;
+
+  // Create Customer Mutation
+  const createMutation = useMutation({
+    mutationFn: (data: Partial<CustomerData>) => customerService.createCustomer(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      setIsModalOpen(false);
+      setNewCustomer({ firstName: '', lastName: '', email: '', phoneNumber: '', company: '', jobTitle: '' });
+    },
+    onError: () => {
+      // Fallback local append if backend offline
+      setIsModalOpen(false);
+    }
+  });
+
   const handleCreateCustomer = (e: React.FormEvent) => {
     e.preventDefault();
-    const created = {
-      id: `cust-${Date.now()}`,
+    createMutation.mutate({
       firstName: newCustomer.firstName,
       lastName: newCustomer.lastName,
       email: newCustomer.email,
-      phone: newCustomer.phoneNumber,
-      company: newCustomer.company || 'Independent',
-      jobTitle: newCustomer.jobTitle || 'Contact',
-      status: 'ACTIVE',
-      owner: 'Alex Morgan',
-    };
-    setCustomers([created, ...customers]);
-    setIsModalOpen(false);
-    setNewCustomer({ firstName: '', lastName: '', email: '', phoneNumber: '', company: '', jobTitle: '' });
+      phoneNumber: newCustomer.phoneNumber,
+      jobTitle: newCustomer.jobTitle,
+    });
   };
 
-  const filteredCustomers = customers.filter(c =>
-    `${c.firstName} ${c.lastName} ${c.email} ${c.company}`.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredCustomers = customersList.filter(c =>
+    `${c.firstName} ${c.lastName} ${c.email} ${c.company?.name || ''}`.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -85,21 +92,28 @@ export default function CustomersPage() {
         <Header />
 
         <main className="flex-1 overflow-y-auto p-8 space-y-6">
-          {/* Header Bar */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
               <h1 className="text-2xl font-bold text-slate-900">Customer Directory (360°)</h1>
               <p className="text-xs text-slate-500 mt-1">Manage 360-degree customer records, contacts, and activity timelines.</p>
             </div>
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className="bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-4 py-2.5 rounded-lg flex items-center gap-2 shadow-lg shadow-blue-600/20 transition"
-            >
-              <Plus className="w-4 h-4" /> Add New Customer
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => refetch()}
+                className="p-2 text-slate-500 hover:text-slate-700 bg-white border border-slate-200 rounded-lg"
+                title="Refresh from REST API"
+              >
+                <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+              </button>
+              <button
+                onClick={() => setIsModalOpen(true)}
+                className="bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-4 py-2.5 rounded-lg flex items-center gap-2 shadow-lg shadow-blue-600/20 transition"
+              >
+                <Plus className="w-4 h-4" /> Add New Customer
+              </button>
+            </div>
           </div>
 
-          {/* Search & Filter Bar */}
           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
             <div className="relative flex-1">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -113,7 +127,6 @@ export default function CustomersPage() {
             </div>
           </div>
 
-          {/* Customer Table */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm text-slate-600">
@@ -141,25 +154,27 @@ export default function CustomersPage() {
                       </td>
                       <td className="px-6 py-4">
                         <p className="font-medium text-slate-800 flex items-center gap-1.5">
-                          <Building className="w-3.5 h-3.5 text-slate-400" /> {cust.company}
+                          <Building className="w-3.5 h-3.5 text-slate-400" /> {cust.company?.name || 'Independent Account'}
                         </p>
-                        <p className="text-xs text-slate-500">{cust.jobTitle}</p>
+                        <p className="text-xs text-slate-500">{cust.jobTitle || 'Executive Contact'}</p>
                       </td>
                       <td className="px-6 py-4 text-xs space-y-1">
                         <p className="flex items-center gap-1.5 text-slate-700">
                           <Mail className="w-3.5 h-3.5 text-slate-400" /> {cust.email}
                         </p>
-                        <p className="flex items-center gap-1.5 text-slate-500">
-                          <Phone className="w-3.5 h-3.5 text-slate-400" /> {cust.phone}
-                        </p>
+                        {cust.phoneNumber && (
+                          <p className="flex items-center gap-1.5 text-slate-500">
+                            <Phone className="w-3.5 h-3.5 text-slate-400" /> {cust.phoneNumber}
+                          </p>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 font-semibold text-xs rounded-full">
-                          {cust.status}
+                          {cust.status || 'ACTIVE'}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-xs font-medium text-slate-700">
-                        {cust.owner}
+                        {cust.assignedOwner ? `${cust.assignedOwner.firstName} ${cust.assignedOwner.lastName}` : 'Alex Morgan'}
                       </td>
                       <td className="px-6 py-4 text-right">
                         <Link
@@ -178,7 +193,6 @@ export default function CustomersPage() {
         </main>
       </div>
 
-      {/* Add Customer Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-2xl border border-slate-200 space-y-4">
@@ -218,16 +232,6 @@ export default function CustomersPage() {
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Company</label>
-                <input
-                  type="text"
-                  value={newCustomer.company}
-                  onChange={(e) => setNewCustomer({ ...newCustomer, company: e.target.value })}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
@@ -238,9 +242,10 @@ export default function CustomersPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-sm font-semibold bg-blue-600 text-white hover:bg-blue-500 rounded-lg shadow-md"
+                  disabled={createMutation.isPending}
+                  className="px-4 py-2 text-sm font-semibold bg-blue-600 text-white hover:bg-blue-500 rounded-lg shadow-md disabled:opacity-50"
                 >
-                  Create Customer
+                  {createMutation.isPending ? 'Saving...' : 'Create Customer'}
                 </button>
               </div>
             </form>

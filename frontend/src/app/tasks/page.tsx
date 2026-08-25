@@ -3,12 +3,15 @@
 import React, { useState } from 'react';
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
-import { CheckSquare, Calendar, Plus, Clock, AlertCircle, CheckCircle2, User, Building } from 'lucide-react';
+import { CheckSquare, Calendar, Plus, Clock, CheckCircle2, User, Building, RefreshCw } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { taskService, TaskData } from '@/services/taskService';
 
 export default function TasksPage() {
   const [viewMode, setViewMode] = useState<'LIST' | 'CALENDAR'>('LIST');
+  const queryClient = useQueryClient();
 
-  const [tasks, setTasks] = useState([
+  const demoTasks: TaskData[] = [
     {
       id: 'task-1',
       title: 'Send Enterprise Proposal to TechCorp',
@@ -16,8 +19,6 @@ export default function TasksPage() {
       priority: 'HIGH',
       status: 'PENDING',
       dueDate: 'Today, 4:00 PM',
-      assignedTo: 'Alex Morgan',
-      customer: 'Sarah Jenkins (TechCorp)',
     },
     {
       id: 'task-2',
@@ -26,49 +27,49 @@ export default function TasksPage() {
       priority: 'URGENT',
       status: 'IN_PROGRESS',
       dueDate: 'Tomorrow, 11:00 AM',
-      assignedTo: 'Alex Morgan',
-      customer: 'Michael Chang (Global Retail)',
     },
-    {
-      id: 'task-3',
-      title: 'Schedule Product Walkthrough for Starlight',
-      description: 'Demo AI Smart Customer Memory Bank feature.',
-      priority: 'MEDIUM',
-      status: 'COMPLETED',
-      dueDate: 'Yesterday',
-      assignedTo: 'Taylor Swift',
-      customer: 'Elena Rostova (Starlight)',
-    },
-  ]);
+  ];
+
+  // Fetch Tasks from REST API
+  const { data: apiTasks, isLoading, refetch } = useQuery({
+    queryKey: ['tasks'],
+    queryFn: taskService.getTasks,
+  });
+
+  const tasks = (apiTasks && apiTasks.length > 0) ? apiTasks : demoTasks;
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newTask, setNewTask] = useState({ title: '', description: '', priority: 'MEDIUM', dueDate: '' });
+  const [newTask, setNewTask] = useState({ title: '', description: '', priority: 'MEDIUM' });
+
+  // Mutations
+  const createMutation = useMutation({
+    mutationFn: (task: Partial<TaskData>) => taskService.createTask(task),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      setIsModalOpen(false);
+      setNewTask({ title: '', description: '', priority: 'MEDIUM' });
+    },
+  });
+
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) => taskService.updateTaskStatus(id, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    },
+  });
 
   const handleCreateTask = (e: React.FormEvent) => {
     e.preventDefault();
-    const created = {
-      id: `task-${Date.now()}`,
+    createMutation.mutate({
       title: newTask.title,
       description: newTask.description,
       priority: newTask.priority,
-      status: 'PENDING',
-      dueDate: newTask.dueDate || 'Tomorrow, 5:00 PM',
-      assignedTo: 'Alex Morgan',
-      customer: 'Assigned Customer',
-    };
-    setTasks([created, ...tasks]);
-    setIsModalOpen(false);
-    setNewTask({ title: '', description: '', priority: 'MEDIUM', dueDate: '' });
+    });
   };
 
-  const toggleTaskCompleted = (id: string) => {
-    setTasks(tasks.map(t => {
-      if (t.id === id) {
-        const nextStatus = t.status === 'COMPLETED' ? 'PENDING' : 'COMPLETED';
-        return { ...t, status: nextStatus };
-      }
-      return t;
-    }));
+  const toggleTaskCompleted = (id: string, currentStatus?: string) => {
+    const nextStatus = currentStatus === 'COMPLETED' ? 'PENDING' : 'COMPLETED';
+    updateStatusMutation.mutate({ id, status: nextStatus });
   };
 
   return (
@@ -84,6 +85,13 @@ export default function TasksPage() {
               <p className="text-xs text-slate-500 mt-1">Organize team tasks, follow-up reminders, and customer call events.</p>
             </div>
             <div className="flex items-center gap-3">
+              <button
+                onClick={() => refetch()}
+                className="p-2 bg-white border border-slate-200 rounded-lg text-slate-600 hover:text-slate-900"
+                title="Refresh Tasks"
+              >
+                <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+              </button>
               <div className="bg-slate-200 p-1 rounded-lg flex items-center gap-1 text-xs font-semibold">
                 <button
                   onClick={() => setViewMode('LIST')}
@@ -112,7 +120,7 @@ export default function TasksPage() {
               {tasks.map((task) => (
                 <div key={task.id} className="p-5 flex items-start gap-4 hover:bg-slate-50 transition">
                   <button
-                    onClick={() => toggleTaskCompleted(task.id)}
+                    onClick={() => toggleTaskCompleted(task.id!, task.status)}
                     className={`mt-1 w-5 h-5 rounded border flex items-center justify-center transition ${
                       task.status === 'COMPLETED' ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-slate-300 hover:border-blue-500'
                     }`}
@@ -129,23 +137,11 @@ export default function TasksPage() {
                         task.priority === 'URGENT' ? 'bg-red-100 text-red-800' :
                         task.priority === 'HIGH' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'
                       }`}>
-                        {task.priority}
+                        {task.priority || 'MEDIUM'}
                       </span>
                     </div>
 
                     <p className="text-xs text-slate-600 mt-1">{task.description}</p>
-
-                    <div className="flex items-center gap-4 mt-3 text-xs text-slate-500">
-                      <span className="flex items-center gap-1 font-semibold text-slate-700">
-                        <Clock className="w-3.5 h-3.5 text-slate-400" /> Due: {task.dueDate}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <User className="w-3.5 h-3.5 text-slate-400" /> Assigne: {task.assignedTo}
-                      </span>
-                      <span className="flex items-center gap-1 text-blue-600 font-medium">
-                        <Building className="w-3.5 h-3.5" /> {task.customer}
-                      </span>
-                    </div>
                   </div>
                 </div>
               ))}
@@ -163,16 +159,6 @@ export default function TasksPage() {
                 {[...Array(35)].map((_, i) => (
                   <div key={i} className="border border-slate-100 rounded-lg p-2 text-xs text-slate-400 font-medium bg-slate-50/50 hover:bg-blue-50/50 transition">
                     <span className="font-bold text-slate-700">{i + 1}</span>
-                    {i === 24 && (
-                      <div className="mt-1 bg-blue-600 text-white p-1 rounded text-[10px] font-bold truncate">
-                        11:00 AM Call w/ Global Retail
-                      </div>
-                    )}
-                    {i === 25 && (
-                      <div className="mt-1 bg-amber-500 text-white p-1 rounded text-[10px] font-bold truncate">
-                        4:00 PM TechCorp Proposal
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
@@ -181,7 +167,6 @@ export default function TasksPage() {
         </main>
       </div>
 
-      {/* Add Task Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-2xl border border-slate-200 space-y-4">
@@ -233,9 +218,10 @@ export default function TasksPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-sm font-semibold bg-blue-600 text-white hover:bg-blue-500 rounded-lg shadow-md"
+                  disabled={createMutation.isPending}
+                  className="px-4 py-2 text-sm font-semibold bg-blue-600 text-white hover:bg-blue-500 rounded-lg shadow-md disabled:opacity-50"
                 >
-                  Save Task
+                  {createMutation.isPending ? 'Saving...' : 'Save Task'}
                 </button>
               </div>
             </form>

@@ -13,4 +13,6 @@ public interface CustomerRepository extends JpaRepository<Customer, UUID> {
     Optional<Customer> findByIdAndOrganizationId(UUID id, UUID organizationId);
     List<Customer> findByOrganizationIdAndEmailContainingIgnoreCaseOrFirstNameContainingIgnoreCaseOrLastNameContainingIgnoreCase(
             UUID organizationId, String email, String firstName, String lastName);
+    long countByOrganizationId(UUID organizationId);
 }
+

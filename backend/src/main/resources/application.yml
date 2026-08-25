@@ -7,22 +7,21 @@ spring:
   application:
     name: smartcommunication-backend
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/smartcomm_db}
-    username: ${SPRING_DATASOURCE_USERNAME:smartcomm_user}
-    password: ${SPRING_DATASOURCE_PASSWORD:smartcomm_password}
-    driver-class-name: org.postgresql.Driver
+    url: ${SPRING_DATASOURCE_URL:jdbc:h2:mem:smartcomm_db;DB_CLOSE_DELAY=-1;MODE=PostgreSQL}
+    username: ${SPRING_DATASOURCE_USERNAME:sa}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+    driver-class-name: ${SPRING_DATASOURCE_DRIVER:org.h2.Driver}
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
   jpa:
     hibernate:
       ddl-auto: update
     show-sql: false
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
-  data:
-    redis:
-      host: ${SPRING_REDIS_HOST:localhost}
-      port: ${SPRING_REDIS_PORT:6379}
 
 jwt:
   secret: ${JWT_SECRET:c21hcnRjb21tdW5pY2F0aW9uY3JtX3NlY3VyZV9qd3Rfc2VjcmV0X2tleV8yMDI2X2FpX3BsYXRmb3Jt}
@@ -30,6 +29,6 @@ jwt:
   refresh-expiration-ms: 604800000 # 7 days
 
 ai:
-  provider: ${AI_PROVIDER:mock} # mock, gemini, openai
+  provider: ${AI_PROVIDER:mock}
   api-key: ${AI_API_KEY:mock_key}
   model: ${AI_MODEL:gemini-1.5-flash}

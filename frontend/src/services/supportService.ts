@@ -4,7 +4,7 @@ export interface TicketData {
   id?: string;
   ticketNumber?: string;
   subject: string;
-  description: string;
+  description?: string;
   status?: string;
   priority?: string;
   firstResponseDueAt?: string;

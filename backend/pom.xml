@@ -65,6 +65,13 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- H2 Embedded Database Fallback -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
         <!-- JJWT Token Library -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>

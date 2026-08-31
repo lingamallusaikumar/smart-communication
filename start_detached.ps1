@@ -1,5 +1,8 @@
-$frontendDir = "c:\Users\saiku\OneDrive\Desktop\ELEVATEIQ\github project\frontend"
-$backendDir = "c:\Users\saiku\OneDrive\Desktop\ELEVATEIQ\github project\backend"
+$scriptDir = $PSScriptRoot
+if (-not $scriptDir) { $scriptDir = Get-Location }
+
+$frontendDir = Join-Path $scriptDir "frontend"
+$backendDir = Join-Path $scriptDir "backend"
 
 Write-Host "Launching Frontend Terminal Window..."
 Start-Process powershell.exe -ArgumentList "-NoExit", "-Command", "cd '$frontendDir'; `$env:PATH = 'C:\Program Files\nodejs;' + `$env:PATH; Write-Host '=========================================='; Write-Host '  SmartComm NEXT.JS FRONTEND (Port 3000)  '; Write-Host '=========================================='; & 'C:\Program Files\nodejs\npm.cmd' run dev"
